@@ -35,7 +35,7 @@ flowchart LR
   LS -->|proxy| BE[Backend :4001]
   C -->|Dashboard| LS
   LS -->|/metrics| C
-  LS -->|cache store\n(memory/redis/file)| CS[(Cache)]
+  LS -->|cache store (memory/redis/file)| CS[(Cache)]
 ```
 
 ## Quick Start
