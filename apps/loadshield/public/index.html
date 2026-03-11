@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LoadShield Demo Dashboard</title>
+    <style>
+      :root {
+        --bg: #0b1220;
+        --panel: #0f1a2f;
+        --panel2: #0c1629;
+        --text: #e9eefc;
+        --muted: #9bb0dd;
+        --good: #2ee59d;
+        --warn: #ffcc66;
+        --bad: #ff4d6d;
+        --accent: #60a5fa;
+        --border: rgba(255, 255, 255, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        color: var(--text);
+        background: radial-gradient(1200px 600px at 20% 10%, rgba(96,165,250,0.22), transparent 55%),
+          radial-gradient(900px 500px at 75% 35%, rgba(46,229,157,0.17), transparent 60%),
+          linear-gradient(180deg, #070b14, var(--bg));
+        min-height: 100vh;
+      }
+      header {
+        padding: 22px 18px 12px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, rgba(15,26,47,0.85), rgba(15,26,47,0.35));
+        position: sticky;
+        top: 0;
+        backdrop-filter: blur(8px);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: 0.3px;
+      }
+      .sub {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      main { padding: 18px; }
+      .grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(12, 1fr);
+      }
+      .card {
+        background: linear-gradient(180deg, rgba(15,26,47,0.8), rgba(12,22,41,0.85));
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 18px 45px rgba(0,0,0,0.35);
+      }
+      .kpi { grid-column: span 3; }
+      .chart { grid-column: span 12; }
+      .kpi .label { color: var(--muted); font-size: 12px; }
+      .kpi .value { margin-top: 8px; font-size: 22px; }
+      .pill {
+        display: inline-block;
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        margin-left: 10px;
+      }
+      canvas { width: 100%; height: 280px; display: block; }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .legend { display: flex; gap: 10px; flex-wrap: wrap; }
+      .dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; margin-right: 8px; }
+      .dot.good { background: var(--good); }
+      .dot.bad { background: var(--bad); }
+      .dot.accent { background: var(--accent); }
+      @media (max-width: 900px) {
+        .kpi { grid-column: span 6; }
+      }
+      @media (max-width: 520px) {
+        .kpi { grid-column: span 12; }
+        canvas { height: 240px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <h1>LoadShield Dashboard <span class="pill" id="storeKind">store</span></h1>
+        <p class="sub">
+          This demo shows what happens during a traffic spike: requests are either <span style="color:var(--good)">allowed</span>,
+          <span style="color:var(--warn)">throttled</span>, or <span style="color:var(--bad)">blocked</span> so the backend survives.
+        </p>
+      </div>
+    </header>
+    <main class="wrap">
+      <section class="grid">
+        <div class="card kpi">
+          <div class="label">Total Requests</div>
+          <div class="value" id="kpiTotal">0</div>
+        </div>
+        <div class="card kpi">
+          <div class="label">Blocked</div>
+          <div class="value" id="kpiBlocked" style="color:var(--bad)">0</div>
+        </div>
+        <div class="card kpi">
+          <div class="label">Throttled</div>
+          <div class="value" id="kpiThrottled" style="color:var(--warn)">0</div>
+        </div>
+        <div class="card kpi">
+          <div class="label">Suspicious</div>
+          <div class="value" id="kpiSuspicious" style="color:var(--accent)">0</div>
+        </div>
+
+        <div class="card chart">
+          <div class="row">
+            <div style="font-size:12px;color:var(--muted)">Requests/sec (last ~2 min)</div>
+            <div class="legend" style="font-size:12px;color:var(--muted)">
+              <span><span class="dot good"></span>allowed</span>
+              <span><span class="dot bad"></span>blocked</span>
+              <span><span class="dot accent"></span>backend inflight</span>
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <canvas id="chart"></canvas>
+          </div>
+          <div class="sub" id="hint" style="margin-top:10px">
+            Tip: run `npm run spike:direct` then `npm run spike:shield` and watch the difference.
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const chart = $("chart");
+      const ctx = chart.getContext("2d");
+
+      function sizeCanvas() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = chart.getBoundingClientRect();
+        chart.width = Math.floor(rect.width * dpr);
+        chart.height = Math.floor(rect.height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      window.addEventListener("resize", sizeCanvas);
+      sizeCanvas();
+
+      function drawSeries(series, color, maxY, w, h, pad, fill=false) {
+        ctx.beginPath();
+        series.forEach((y, i) => {
+          const x = pad + (i * (w - pad * 2)) / Math.max(1, series.length - 1);
+          const yy = h - pad - (y / Math.max(1, maxY)) * (h - pad * 2);
+          if (i === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        if (fill) {
+          ctx.lineTo(w - pad, h - pad);
+          ctx.lineTo(pad, h - pad);
+          ctx.closePath();
+          ctx.globalAlpha = 0.12;
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      function draw(metrics) {
+        const w = chart.clientWidth;
+        const h = chart.clientHeight;
+        const pad = 18;
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = "rgba(255,255,255,0.04)";
+        ctx.fillRect(0, 0, w, h);
+
+        const pts = metrics.perSecond || [];
+        const allowed = pts.map(p => p.allowed);
+        const blocked = pts.map(p => p.blocked);
+        const inflight = (metrics.backend?.inflightSeries || []).slice(-pts.length);
+
+        const maxReq = Math.max(10, ...allowed, ...blocked);
+        const maxInflight = Math.max(10, ...(inflight.length ? inflight : [0]));
+        const maxY = Math.max(maxReq, maxInflight);
+
+        // Grid
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
+        ctx.lineWidth = 1;
+        for (let i=0;i<=4;i++){
+          const y = pad + (i * (h - pad * 2)) / 4;
+          ctx.beginPath();
+          ctx.moveTo(pad, y);
+          ctx.lineTo(w - pad, y);
+          ctx.stroke();
+        }
+
+        drawSeries(allowed, "#2ee59d", maxY, w, h, pad, true);
+        drawSeries(blocked, "#ff4d6d", maxY, w, h, pad, true);
+        if (inflight.length) drawSeries(inflight, "#60a5fa", maxY, w, h, pad, false);
+
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.font = "12px ui-monospace, monospace";
+        ctx.fillText(`maxY ${maxY}`, pad, pad - 4);
+      }
+
+      async function poll() {
+        try {
+          const res = await fetch("/metrics");
+          const m = await res.json();
+
+          $("storeKind").textContent = m.store?.kind || "store";
+          const total = (m.totals?.allowed || 0) + (m.totals?.blocked || 0);
+          $("kpiTotal").textContent = total.toLocaleString();
+          $("kpiBlocked").textContent = (m.totals?.blocked || 0).toLocaleString();
+          $("kpiThrottled").textContent = (m.totals?.throttled || 0).toLocaleString();
+          $("kpiSuspicious").textContent = (m.totals?.suspicious || 0).toLocaleString();
+
+          draw(m);
+        } catch (e) {
+          // noop
+        } finally {
+          setTimeout(poll, 750);
+        }
+      }
+      poll();
+    </script>
+  </body>
+</html>
+

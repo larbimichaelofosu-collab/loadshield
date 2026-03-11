@@ -1,0 +1,31 @@
+{
+  "name": "loadshield-demo",
+  "author": "Michael Kwame Ofosu Larbi",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "check": "node --check apps/backend/server.js && node --check apps/loadshield/server.js && node --check scripts/spike.mjs",
+    "start:backend": "node apps/backend/server.js",
+    "start:loadshield": "node apps/loadshield/server.js",
+    "dev": "concurrently -k -n loadshield,backend -c blue,green \"node apps/loadshield/server.js\" \"node apps/backend/server.js\"",
+    "start": "npm run dev",
+    "spike": "node scripts/spike.mjs",
+    "spike:direct": "node scripts/spike.mjs --direct",
+    "spike:shield": "node scripts/spike.mjs --shield"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "http-proxy-middleware": "^3.0.3",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.4.2"
+  }
+}
